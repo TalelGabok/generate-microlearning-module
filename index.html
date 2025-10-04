@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Microlearning Mission Generator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50">
+    <div id="app"></div>
+
+    <script>
+        let apiKey = '';
+        let apiProvider = 'openai';
+        let formData = {
+            topic: '',
+            targetAudience: '',
+            learningObjective: '',
+            context: ''
+        };
+        let generatedMission = null;
+        let isGenerating = false;
+
+        function render() {
+            const app = document.getElementById('app');
+            app.innerHTML = `
+                <div class="min-h-screen">
+                    <div class="bg-gradient-to-r from-indigo-900 to-indigo-800 text-white py-6 px-8 shadow-lg">
+                        <div class="max-w-5xl mx-auto">
+                            <h1 class="text-3xl font-bold">Microlearning Mission Generator</h1>
+                            <p class="text-indigo-100 mt-1">Create 3-5 minute online learning modules</p>
+                        </div>
+                    </div>
+
+                    <div class="max-w-5xl mx-auto p-8">
+                        ${!generatedMission ? `
+                            <div class="bg-white rounded-lg shadow-md p-6 mb-6 border-l-4 border-indigo-800">
+                                <h2 class="text-xl font-semibold mb-4">API Configuration</h2>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-2">AI Provider</label>
+                                        <select id="apiProvider" class="w-full px-4 py-2 border rounded-lg">
+                                            <option value="openai">OpenAI (GPT-4)</option>
+                                            <option value="anthropic">Anthropic (Claude)</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-2">API Key *</label>
+                                        <input type="password" id="apiKey" placeholder="Enter your API key" 
+                                               class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-800">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+                                <h2 class="text-xl font-semibold mb-4">Mission Details</h2>
+                                <div class="space-y-4">
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-2">Topic / Title *</label>
+                                        <input type="text" id="topic" value="${formData.topic}"
+                                               placeholder="e.g., 5S Workplace Organization"
+                                               class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-800">
+                                        <p class="text-xs text-gray-500 mt-1">What is this microlearning about?</p>
+                                    </div>
+
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-2">Target Audience *</label>
+                                        <input type="text" id="targetAudience" value="${formData.targetAudience}"
+                                               placeholder="e.g., Warehouse supervisors, Manufacturing operators"
+                                               class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-800">
+                                        <p class="text-xs text-gray-500 mt-1">Who is this for?</p>
+                                    </div>
+
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-2">Learning Objective *</label>
+                                        <input type="text" id="learningObjective" value="${formData.learningObjective}"
+                                               placeholder="e.g., Implement 5S to improve workplace safety and efficiency"
+                                               class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-800">
+                                        <p class="text-xs text-gray-500 mt-1">What should learners be able to do after completing this?</p>
+                                    </div>
+
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-2">Key Context & Background</label>
+                                        <textarea id="context" rows="4" 
+                                                  placeholder="Industry, specific challenges, pain points, regulatory requirements, etc."
+                                                  class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-800">${formData.context}</textarea>
+                                        <p class="text-xs text-gray-500 mt-1">Any important background information (optional but helpful)</p>
+                                    </div>
+                                </div>
+
+                                <button onclick="generateMission()" 
+                                        ${isGenerating ? 'disabled' : ''}
+                                        class="mt-6 w-full py-4 bg-gradient-to-r from-indigo-900 to-indigo-800 text-white rounded-lg font-semibold text-lg hover:from-indigo-800 hover:to-indigo-700 shadow-md disabled:opacity-50 disabled:cursor-not-allowed">
+                                    ${isGenerating ? 'Generating Mission...' : 'Generate Microlearning Mission'}
+                                </button>
+                            </div>
+                        ` : `
+                            <div class="space-y-6">
+                                <div class="bg-white rounded-lg shadow-lg p-6 border-t-4 border-indigo-800">
+                                    <div class="flex justify-between items-start mb-4">
+                                        <div>
+                                            <h2 class="text-2xl font-bold text-indigo-900">Mission Generated</h2>
+                                            <p class="text-gray-600">${generatedMission.slides?.length || 0} slides | Est. ${Math.round((generatedMission.slides?.length || 0) * 37.5 / 60 * 10) / 10} min</p>
+                                        </div>
+                                        <div class="flex gap-3">
+                                            <button onclick="startOver()" class="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700">
+                                                New Mission
+                                            </button>
+                                            <button onclick="downloadJSON()" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+                                                JSON
+                                            </button>
+                                            <button onclick="downloadText()" class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">
+                                                Text
+                                            </button>
+                                            <button onclick="downloadCSV()" class="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700">
+                                                CSV
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="bg-white rounded-lg shadow-md p-6 border-l-4 border-indigo-400">
+                                    <h3 class="text-xl font-bold text-gray-800 mb-3">${generatedMission.mission_title}</h3>
+
+                                    <div class="space-y-4">
+                                        <div class="bg-gray-50 p-4 rounded">
+                                            <h4 class="font-semibold text-gray-800 mb-2">Introduction</h4>
+                                            <p class="text-sm text-gray-700">${generatedMission.introduction}</p>
+                                        </div>
+
+                                        <div>
+                                            <h4 class="font-semibold text-gray-800 mb-2">Slide Outline</h4>
+                                            <div class="overflow-x-auto">
+                                                <table class="w-full text-sm border">
+                                                    <thead class="bg-gray-100">
+                                                        <tr>
+                                                            <th class="border px-3 py-2 text-left">Slide</th>
+                                                            <th class="border px-3 py-2 text-left">Title</th>
+                                                            <th class="border px-3 py-2 text-left">Bullets</th>
+                                                            <th class="border px-3 py-2 text-left">Voice-Over Prompt</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        ${generatedMission.slides.map((slide, i) => `
+                                                            <tr>
+                                                                <td class="border px-3 py-2">${i + 1}</td>
+                                                                <td class="border px-3 py-2 font-medium">${slide.title}</td>
+                                                                <td class="border px-3 py-2">${slide.bullets.join('<br>')}</td>
+                                                                <td class="border px-3 py-2 text-gray-600">${slide.voiceover_prompt}</td>
+                                                            </tr>
+                                                        `).join('')}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+
+                                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div class="bg-blue-50 p-4 rounded">
+                                                <h4 class="font-semibold text-gray-800 mb-2">Learner Steps</h4>
+                                                <ul class="text-sm text-gray-700 space-y-1">
+                                                    ${generatedMission.learner_steps.map(step => `<li>• ${step}</li>`).join('')}
+                                                </ul>
+                                            </div>
+
+                                            <div class="bg-green-50 p-4 rounded">
+                                                <h4 class="font-semibold text-gray-800 mb-2">Habits</h4>
+                                                <ul class="text-sm text-gray-700 space-y-1">
+                                                    ${generatedMission.habits.daily ? `<li>• <strong>Daily:</strong> ${generatedMission.habits.daily}</li>` : ''}
+                                                    ${generatedMission.habits.weekly ? `<li>• <strong>Weekly:</strong> ${generatedMission.habits.weekly}</li>` : ''}
+                                                    ${generatedMission.habits.monthly ? `<li>• <strong>Monthly:</strong> ${generatedMission.habits.monthly}</li>` : ''}
+                                                    ${generatedMission.habits.quarterly ? `<li>• <strong>Quarterly:</strong> ${generatedMission.habits.quarterly}</li>` : ''}
+                                                </ul>
+                                            </div>
+                                        </div>
+
+                                        <div class="bg-purple-50 p-4 rounded">
+                                            <h4 class="font-semibold text-gray-800 mb-2">Chat Prompt</h4>
+                                            <p class="text-sm text-gray-700">${generatedMission.chat_prompt}</p>
+                                        </div>
+
+                                        <div class="bg-orange-50 p-4 rounded">
+                                            <h4 class="font-semibold text-gray-800 mb-2">Mentor Questions</h4>
+                                            <ul class="text-sm text-gray-700 space-y-1">
+                                                ${generatedMission.mentor_questions.map(q => `<li>• ${q}</li>`).join('')}
+                                            </ul>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        `}
+                    </div>
+                </div>
+            `;
+
+            const apiProviderEl = document.getElementById('apiProvider');
+            const apiKeyEl = document.getElementById('apiKey');
+            const topicEl = document.getElementById('topic');
+            const targetAudienceEl = document.getElementById('targetAudience');
+            const learningObjectiveEl = document.getElementById('learningObjective');
+            const contextEl = document.getElementById('context');
+
+            if (apiProviderEl) {
+                apiProviderEl.value = apiProvider;
+                apiProviderEl.onchange = (e) => { apiProvider = e.target.value; };
+            }
+            if (apiKeyEl) {
+                apiKeyEl.value = apiKey;
+                apiKeyEl.oninput = (e) => { apiKey = e.target.value; };
+            }
+            if (topicEl) topicEl.oninput = (e) => { formData.topic = e.target.value; };
+            if (targetAudienceEl) targetAudienceEl.oninput = (e) => { formData.targetAudience = e.target.value; };
+            if (learningObjectiveEl) learningObjectiveEl.oninput = (e) => { formData.learningObjective = e.target.value; };
+            if (contextEl) contextEl.oninput = (e) => { formData.context = e.target.value; };
+        }
+
+        async function generateMission() {
+            if (!apiKey) {
+                alert('Please enter your API key');
+                return;
+            }
+
+            if (!formData.topic || !formData.targetAudience || !formData.learningObjective) {
+                alert('Please fill in all required fields (Topic, Target Audience, Learning Objective)');
+                return;
+            }
+
+            isGenerating = true;
+            render();
+
+            const prompt = `You are an expert instructional designer creating online microlearning missions.
+
+Create a production-ready mission document for this training topic:
+
+MISSION DETAILS:
+Topic: ${formData.topic}
+Target Audience: ${formData.targetAudience}
+Learning Objective: ${formData.learningObjective}
+${formData.context ? `Context: ${formData.context}` : ''}
+
+REQUIREMENTS:
+- 3-5 minute online learning module (12-18 slides at 30-45 seconds each)
+- Adapt slide flow based on content type (conceptual vs. procedural vs. behavioral)
+- Voice-over prompts should be reflective questions, NOT full scripts
+- This is for remote/online delivery
+
+Generate a JSON object with this EXACT structure:
+{
+  "mission_title": "Clear, compelling title",
+  "introduction": "2-3 sentence paragraph introducing the topic and why it matters",
+  "slides": [
+    {
+      "slide_number": 1,
+      "title": "Slide title",
+      "bullets": ["Bullet 1", "Bullet 2", "Bullet 3"],
+      "voiceover_prompt": "Reflective question or thinking prompt"
+    }
+  ],
+  "learner_steps": [
+    "Read the material in this mission",
+    "Watch the presentation video (5-7 minutes)",
+    "Interact with the chat activity",
+    "Reflect on and answer the mentor questions"
+  ],
+  "chat_prompt": "One engaging question about applying this topic",
+  "mentor_questions": [
+    "Question 1 about application",
+    "Question 2 about challenges",
+    "Question 3 about implementation",
+    "Question 4 about making it sustainable"
+  ],
+  "habits": {
+    "daily": "Daily habit suggestion or null",
+    "weekly": "Weekly habit suggestion or null", 
+    "monthly": "Monthly habit suggestion or null",
+    "quarterly": "Quarterly habit suggestion or null"
+  }
+}
+
+CRITICAL: Return ONLY valid JSON, no other text.`;
+
+            try {
+                let response;
+
+                if (apiProvider === 'openai') {
+                    response = await fetch('https://api.openai.com/v1/chat/completions', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${apiKey}`
+                        },
+                        body: JSON.stringify({
+                            model: 'gpt-4o',
+                            messages: [
+                                { role: 'system', content: 'You are an expert instructional designer. Always respond with valid JSON only.' },
+                                { role: 'user', content: prompt }
+                            ],
+                            temperature: 0.7
+                        })
+                    });
+                } else {
+                    response = await fetch('https://api.anthropic.com/v1/messages', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'x-api-key': apiKey,
+                            'anthropic-version': '2023-06-01'
+                        },
+                        body: JSON.stringify({
+                            model: 'claude-sonnet-4-20250514',
+                            max_tokens: 4096,
+                            messages: [{ role: 'user', content: prompt }]
+                        })
+                    });
+                }
+
+                if (!response.ok) {
+                    throw new Error(`API Error ${response.status}`);
+                }
+
+                const data = await response.json();
+                let content = apiProvider === 'openai' 
+                    ? data.choices[0].message.content 
+                    : data.content[0].text;
+
+                content = content.trim();
+                if (content.startsWith('```json')) {
+                    content = content.replace(/^```json\n/, '').replace(/\n```$/, '');
+                } else if (content.startsWith('```')) {
+                    content = content.replace(/^```\n/, '').replace(/\n```$/, '');
+                }
+
+                generatedMission = JSON.parse(content);
+                isGenerating = false;
+                render();
+
+            } catch (error) {
+                alert(`Error generating mission: ${error.message}`);
+                isGenerating = false;
+                render();
+            }
+        }
+
+        function startOver() {
+            generatedMission = null;
+            render();
+        }
+
+        function downloadJSON() {
+            const blob = new Blob([JSON.stringify(generatedMission, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${generatedMission.mission_title.replace(/\s+/g, '_')}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function downloadText() {
+            let text = `${generatedMission.mission_title}\n\n`;
+            text += `Introduction\n${generatedMission.introduction}\n\n`;
+            text += `Slide Outline\n`;
+            text += `Slide\tTitle\tSlide Bullets\tVoice-Over Prompt\n`;
+            generatedMission.slides.forEach((slide, i) => {
+                text += `${i + 1}\t${slide.title}\t${slide.bullets.join('\n')}\t${slide.voiceover_prompt}\n`;
+            });
+            text += `\nLearner Steps\n${generatedMission.learner_steps.map(s => '• ' + s).join('\n')}\n\n`;
+            text += `Chat Prompt\n${generatedMission.chat_prompt}\n\n`;
+            text += `Mentor Questions\n${generatedMission.mentor_questions.map(q => '• ' + q).join('\n')}\n\n`;
+            text += `Habits\n`;
+            if (generatedMission.habits.daily) text += `• Daily: ${generatedMission.habits.daily}\n`;
+            if (generatedMission.habits.weekly) text += `• Weekly: ${generatedMission.habits.weekly}\n`;
+            if (generatedMission.habits.monthly) text += `• Monthly: ${generatedMission.habits.monthly}\n`;
+            if (generatedMission.habits.quarterly) text += `• Quarterly: ${generatedMission.habits.quarterly}\n`;
+
+            const blob = new Blob([text], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${generatedMission.mission_title.replace(/\s+/g, '_')}.txt`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function downloadCSV() {
+            const headers = ['Slide', 'Title', 'Slide Bullets', 'Voice-Over Prompt'];
+            const rows = generatedMission.slides.map((s, i) => [
+                i + 1,
+                s.title,
+                s.bullets.join(' | '),
+                s.voiceover_prompt
+            ]);
+
+            const csv = [
+                headers.join(','),
+                ...rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(','))
+            ].join('\n');
+
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${generatedMission.mission_title.replace(/\s+/g, '_')}_Slides.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        render();
+    </script>
+</body>
+</html>
