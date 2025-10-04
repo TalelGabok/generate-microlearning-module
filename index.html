@@ -8,563 +8,289 @@
 </head>
 <body class="bg-gray-50">
     <div id="app"></div>
-
     <script>
-        let apiKey = '';
-        let apiProvider = 'openai';
-        let formData = {
+        let state = {
+            apiKey: '',
+            apiProvider: 'openai',
             topic: '',
-            targetAudience: '',
-            learningObjective: '',
-            context: ''
+            audience: '',
+            objective: '',
+            context: '',
+            mission: null,
+            generating: false,
+            editing: false
         };
-        let generatedMission = null;
-        let isGenerating = false;
-        let isEditing = false;
-        let chatHistory = [];
-        let isProcessingChat = false;
 
         function render() {
-            const app = document.getElementById('app');
-            app.innerHTML = `
+            document.getElementById('app').innerHTML = `
                 <div class="min-h-screen">
-                    <div class="bg-gradient-to-r from-indigo-900 to-indigo-800 text-white py-6 px-8 shadow-lg">
+                    <div class="bg-gradient-to-r from-indigo-900 to-indigo-800 text-white py-6 px-8">
                         <div class="max-w-5xl mx-auto">
                             <h1 class="text-3xl font-bold">Microlearning Mission Generator</h1>
                             <p class="text-indigo-100 mt-1">Create 3-5 minute online learning modules</p>
                         </div>
                     </div>
-
                     <div class="max-w-5xl mx-auto p-8">
-                        ${!generatedMission ? `
-                            <div class="bg-white rounded-lg shadow-md p-6 mb-6 border-l-4 border-indigo-800">
-                                <h2 class="text-xl font-semibold mb-4">API Configuration</h2>
-                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div>
-                                        <label class="block text-sm font-medium text-gray-700 mb-2">AI Provider</label>
-                                        <select id="apiProvider" class="w-full px-4 py-2 border rounded-lg">
-                                            <option value="openai">OpenAI (GPT-4)</option>
-                                            <option value="anthropic">Anthropic (Claude)</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label class="block text-sm font-medium text-gray-700 mb-2">API Key *</label>
-                                        <input type="password" id="apiKey" placeholder="Enter your API key" 
-                                               class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-800">
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="bg-white rounded-lg shadow-md p-6 mb-6">
-                                <h2 class="text-xl font-semibold mb-4">Mission Details</h2>
-                                <div class="space-y-4">
-                                    <div>
-                                        <label class="block text-sm font-medium text-gray-700 mb-2">Topic / Title *</label>
-                                        <input type="text" id="topic" value="${formData.topic}"
-                                               placeholder="e.g., 5S Workplace Organization"
-                                               class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-800">
-                                        <p class="text-xs text-gray-500 mt-1">What is this microlearning about?</p>
-                                    </div>
-
-                                    <div>
-                                        <label class="block text-sm font-medium text-gray-700 mb-2">Target Audience *</label>
-                                        <input type="text" id="targetAudience" value="${formData.targetAudience}"
-                                               placeholder="e.g., Warehouse supervisors, Manufacturing operators"
-                                               class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-800">
-                                        <p class="text-xs text-gray-500 mt-1">Who is this for?</p>
-                                    </div>
-
-                                    <div>
-                                        <label class="block text-sm font-medium text-gray-700 mb-2">Learning Objective *</label>
-                                        <input type="text" id="learningObjective" value="${formData.learningObjective}"
-                                               placeholder="e.g., Implement 5S to improve workplace safety and efficiency"
-                                               class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-800">
-                                        <p class="text-xs text-gray-500 mt-1">What should learners be able to do after completing this?</p>
-                                    </div>
-
-                                    <div>
-                                        <label class="block text-sm font-medium text-gray-700 mb-2">Key Context & Background</label>
-                                        <textarea id="context" rows="4" 
-                                                  placeholder="Industry, specific challenges, pain points, regulatory requirements, etc."
-                                                  class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-800">${formData.context}</textarea>
-                                        <p class="text-xs text-gray-500 mt-1">Any important background information (optional but helpful)</p>
-                                    </div>
-                                </div>
-
-                                <button onclick="generateMission()" 
-                                        ${isGenerating ? 'disabled' : ''}
-                                        class="mt-6 w-full py-4 bg-gradient-to-r from-indigo-900 to-indigo-800 text-white rounded-lg font-semibold text-lg hover:from-indigo-800 hover:to-indigo-700 shadow-md disabled:opacity-50 disabled:cursor-not-allowed">
-                                    ${isGenerating ? 'Generating Mission...' : 'Generate Microlearning Mission'}
-                                </button>
-                            </div>
-                        ` : `
-                            <div class="space-y-6">
-                                <div class="bg-white rounded-lg shadow-lg p-6 border-t-4 border-indigo-800">
-                                    <div class="flex justify-between items-start mb-4">
-                                        <div>
-                                            <h2 class="text-2xl font-bold text-indigo-900">Mission Generated</h2>
-                                            <p class="text-gray-600">${generatedMission.slides?.length || 0} slides | Est. ${Math.round((generatedMission.slides?.length || 0) * 37.5 / 60 * 10) / 10} min</p>
-                                        </div>
-                                        <div class="flex gap-3">
-                                            <button onclick="toggleEdit()" class="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700">
-                                                ${isEditing ? 'View Mode' : 'Edit'}
-                                            </button>
-                                            <button onclick="startOver()" class="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700">
-                                                New Mission
-                                            </button>
-                                            <button onclick="downloadJSON()" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
-                                                JSON
-                                            </button>
-                                            <button onclick="downloadText()" class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">
-                                                Text
-                                            </button>
-                                            <button onclick="downloadCSV()" class="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700">
-                                                CSV
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div class="bg-white rounded-lg shadow-md p-6 border-l-4 border-indigo-400">
-                                    <h3 class="text-xl font-bold text-gray-800 mb-3">${generatedMission.mission_title}</h3>
-
-                                    ${isEditing ? `
-                                        <div class="space-y-4 bg-gray-50 p-4 rounded-lg">
-                                            <div>
-                                                <label class="block text-sm font-semibold mb-1">Mission Title</label>
-                                                <input type="text" value="${generatedMission.mission_title}" 
-                                                       onchange="updateField('mission_title', this.value)"
-                                                       class="w-full px-3 py-2 border rounded">
-                                            </div>
-                                            <div>
-                                                <label class="block text-sm font-semibold mb-1">Introduction</label>
-                                                <textarea rows="3" onchange="updateField('introduction', this.value)"
-                                                          class="w-full px-3 py-2 border rounded">${generatedMission.introduction}</textarea>
-                                            </div>
-                                            <div>
-                                                <label class="block text-sm font-semibold mb-2">Slides</label>
-                                                ${generatedMission.slides.map((slide, si) => `
-                                                    <div class="mb-3 p-3 bg-white border rounded">
-                                                        <input type="text" value="${slide.title}" 
-                                                               onchange="updateSlide(${si}, 'title', this.value)"
-                                                               class="w-full px-2 py-1 border rounded mb-2 font-medium"
-                                                               placeholder="Slide Title">
-                                                        <textarea rows="2" onchange="updateSlide(${si}, 'bullets', this.value.split('\\n'))"
-                                                                  class="w-full px-2 py-1 border rounded mb-2 text-sm"
-                                                                  placeholder="Bullets (one per line)">${slide.bullets.join('\n')}</textarea>
-                                                        <input type="text" value="${slide.voiceover_prompt}" 
-                                                               onchange="updateSlide(${si}, 'voiceover_prompt', this.value)"
-                                                               class="w-full px-2 py-1 border rounded text-sm"
-                                                               placeholder="Voice-over Prompt">
-                                                    </div>
-                                                `).join('')}
-                                            </div>
-                                            <div>
-                                                <label class="block text-sm font-semibold mb-1">Chat Prompt</label>
-                                                <input type="text" value="${generatedMission.chat_prompt}" 
-                                                       onchange="updateField('chat_prompt', this.value)"
-                                                       class="w-full px-3 py-2 border rounded">
-                                            </div>
-                                            
-                                            <div class="border-t pt-4 mt-4">
-                                                <div class="flex justify-between items-center mb-3">
-                                                    <h4 class="font-semibold">AI Assistant</h4>
-                                                    <button onclick="clearChat()" class="text-xs text-gray-500 hover:text-gray-700">Clear</button>
-                                                </div>
-                                                <div class="bg-white border rounded p-3 mb-3 max-h-60 overflow-y-auto">
-                                                    ${chatHistory.length === 0 ? '<p class="text-sm text-gray-500">Ask AI to revise this mission...</p>' : 
-                                                      chatHistory.map(msg => `
-                                                        <div class="mb-2">
-                                                            <span class="text-xs font-semibold ${msg.role === 'user' ? 'text-blue-600' : 'text-green-600'}">
-                                                                ${msg.role === 'user' ? 'You' : 'AI'}:
-                                                            </span>
-                                                            <p class="text-sm">${msg.content}</p>
-                                                        </div>
-                                                      `).join('')}
-                                                    ${isProcessingChat ? '<div class="text-sm text-blue-600">⏳ AI is thinking...</div>' : ''}
-                                                </div>
-                                                <div class="flex gap-2">
-                                                    <input type="text" id="chatInput" 
-                                                           placeholder="e.g., Make slide 3 more concise"
-                                                           ${isProcessingChat ? 'disabled' : ''}
-                                                           class="flex-1 px-3 py-2 border rounded text-sm disabled:bg-gray-100"
-                                                           onkeypress="if(event.key==='Enter') sendChat()">
-                                                    <button onclick="sendChat()" 
-                                                            ${isProcessingChat ? 'disabled' : ''}
-                                                            class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 text-sm disabled:opacity-50">
-                                                        ${isProcessingChat ? 'Processing...' : 'Send'}
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ` : `
-                                    <div class="space-y-4">
-                                        <div class="bg-gray-50 p-4 rounded">
-                                            <h4 class="font-semibold text-gray-800 mb-2">Introduction</h4>
-                                            <p class="text-sm text-gray-700">${generatedMission.introduction}</p>
-                                        </div>
-
-                                        <div>
-                                            <h4 class="font-semibold text-gray-800 mb-2">Slide Outline</h4>
-                                            <div class="overflow-x-auto">
-                                                <table class="w-full text-sm border">
-                                                    <thead class="bg-gray-100">
-                                                        <tr>
-                                                            <th class="border px-3 py-2 text-left">Slide</th>
-                                                            <th class="border px-3 py-2 text-left">Title</th>
-                                                            <th class="border px-3 py-2 text-left">Bullets</th>
-                                                            <th class="border px-3 py-2 text-left">Voice-Over Prompt</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        ${generatedMission.slides.map((slide, i) => `
-                                                            <tr>
-                                                                <td class="border px-3 py-2">${i + 1}</td>
-                                                                <td class="border px-3 py-2 font-medium">${slide.title}</td>
-                                                                <td class="border px-3 py-2">${slide.bullets.join('<br>')}</td>
-                                                                <td class="border px-3 py-2 text-gray-600">${slide.voiceover_prompt}</td>
-                                                            </tr>
-                                                        `).join('')}
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                        </div>
-
-                                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div class="bg-blue-50 p-4 rounded">
-                                                <h4 class="font-semibold text-gray-800 mb-2">Learner Steps</h4>
-                                                <ul class="text-sm text-gray-700 space-y-1">
-                                                    ${generatedMission.learner_steps.map(step => `<li>• ${step}</li>`).join('')}
-                                                </ul>
-                                            </div>
-
-                                            <div class="bg-green-50 p-4 rounded">
-                                                <h4 class="font-semibold text-gray-800 mb-2">Habits</h4>
-                                                <ul class="text-sm text-gray-700 space-y-1">
-                                                    ${generatedMission.habits.daily ? `<li>• <strong>Daily:</strong> ${generatedMission.habits.daily}</li>` : ''}
-                                                    ${generatedMission.habits.weekly ? `<li>• <strong>Weekly:</strong> ${generatedMission.habits.weekly}</li>` : ''}
-                                                    ${generatedMission.habits.monthly ? `<li>• <strong>Monthly:</strong> ${generatedMission.habits.monthly}</li>` : ''}
-                                                    ${generatedMission.habits.quarterly ? `<li>• <strong>Quarterly:</strong> ${generatedMission.habits.quarterly}</li>` : ''}
-                                                </ul>
-                                            </div>
-                                        </div>
-
-                                        <div class="bg-purple-50 p-4 rounded">
-                                            <h4 class="font-semibold text-gray-800 mb-2">Chat Prompt</h4>
-                                            <p class="text-sm text-gray-700">${generatedMission.chat_prompt}</p>
-                                        </div>
-
-                                        <div class="bg-orange-50 p-4 rounded">
-                                            <h4 class="font-semibold text-gray-800 mb-2">Mentor Questions</h4>
-                                            <ul class="text-sm text-gray-700 space-y-1">
-                                                ${generatedMission.mentor_questions.map(q => `<li>• ${q}</li>`).join('')}
-                                            </ul>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        `}
+                        ${state.mission ? renderMission() : renderForm()}
                     </div>
                 </div>
             `;
-
-            const apiProviderEl = document.getElementById('apiProvider');
-            const apiKeyEl = document.getElementById('apiKey');
-            const topicEl = document.getElementById('topic');
-            const targetAudienceEl = document.getElementById('targetAudience');
-            const learningObjectiveEl = document.getElementById('learningObjective');
-            const contextEl = document.getElementById('context');
-
-            if (apiProviderEl) {
-                apiProviderEl.value = apiProvider;
-                apiProviderEl.onchange = (e) => { apiProvider = e.target.value; };
-            }
-            if (apiKeyEl) {
-                apiKeyEl.value = apiKey;
-                apiKeyEl.oninput = (e) => { apiKey = e.target.value; };
-            }
-            if (topicEl) topicEl.oninput = (e) => { formData.topic = e.target.value; };
-            if (targetAudienceEl) targetAudienceEl.oninput = (e) => { formData.targetAudience = e.target.value; };
-            if (learningObjectiveEl) learningObjectiveEl.oninput = (e) => { formData.learningObjective = e.target.value; };
-            if (contextEl) contextEl.oninput = (e) => { formData.context = e.target.value; };
+            attachListeners();
         }
 
-        async function generateMission() {
-            if (!apiKey) {
-                alert('Please enter your API key');
+        function renderForm() {
+            return `
+                <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+                    <h2 class="text-xl font-semibold mb-4">API Configuration</h2>
+                    <div class="grid grid-cols-2 gap-4">
+                        <select id="provider" class="px-4 py-2 border rounded">
+                            <option value="openai" ${state.apiProvider === 'openai' ? 'selected' : ''}>OpenAI</option>
+                            <option value="anthropic" ${state.apiProvider === 'anthropic' ? 'selected' : ''}>Anthropic</option>
+                        </select>
+                        <input type="password" id="apiKey" value="${state.apiKey}" placeholder="API Key *" class="px-4 py-2 border rounded">
+                    </div>
+                </div>
+                <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+                    <h2 class="text-xl font-semibold mb-4">Mission Details</h2>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium mb-2">Topic / Title *</label>
+                            <input type="text" id="topic" value="${state.topic}" placeholder="e.g., 5S Workplace Organization" class="w-full px-4 py-2 border rounded">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-2">Target Audience *</label>
+                            <input type="text" id="audience" value="${state.audience}" placeholder="e.g., Warehouse supervisors" class="w-full px-4 py-2 border rounded">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-2">Learning Objective *</label>
+                            <input type="text" id="objective" value="${state.objective}" placeholder="What should learners be able to do?" class="w-full px-4 py-2 border rounded">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-2">Key Context & Background</label>
+                            <textarea id="context" rows="4" placeholder="Industry, challenges, regulations..." class="w-full px-4 py-2 border rounded">${state.context}</textarea>
+                        </div>
+                    </div>
+                    <button onclick="generate()" ${state.generating ? 'disabled' : ''} 
+                            class="mt-6 w-full py-4 bg-indigo-900 text-white rounded-lg font-semibold disabled:opacity-50">
+                        ${state.generating ? 'Generating...' : 'Generate Mission'}
+                    </button>
+                </div>
+            `;
+        }
+
+        function renderMission() {
+            const m = state.mission;
+            return `
+                <div class="space-y-6">
+                    <div class="bg-white rounded-lg shadow-lg p-6 border-t-4 border-indigo-800">
+                        <div class="flex justify-between mb-4">
+                            <div>
+                                <h2 class="text-2xl font-bold text-indigo-900">Mission Generated</h2>
+                                <p class="text-gray-600">${m.slides.length} slides | ${Math.round(m.slides.length * 37.5 / 60 * 10) / 10} min</p>
+                            </div>
+                            <div class="flex gap-3">
+                                <button onclick="toggleEdit()" class="px-4 py-2 bg-indigo-600 text-white rounded">${state.editing ? 'Done Editing' : 'Edit'}</button>
+                                <button onclick="newMission()" class="px-4 py-2 bg-gray-600 text-white rounded">New</button>
+                                <button onclick="downloadJSON()" class="px-4 py-2 bg-blue-600 text-white rounded">JSON</button>
+                                <button onclick="downloadText()" class="px-4 py-2 bg-green-600 text-white rounded">Text</button>
+                                <button onclick="downloadCSV()" class="px-4 py-2 bg-purple-600 text-white rounded">CSV</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-lg shadow-md p-6 border-l-4 border-indigo-400">
+                        <h3 class="text-xl font-bold mb-3">${m.mission_title}</h3>
+                        ${state.editing ? `
+                            <div class="space-y-4 bg-gray-50 p-4 rounded">
+                                <input type="text" value="${m.mission_title}" onchange="update('mission_title', this.value)" class="w-full px-3 py-2 border rounded font-bold">
+                                <textarea rows="2" onchange="update('introduction', this.value)" class="w-full px-3 py-2 border rounded">${m.introduction}</textarea>
+                                ${m.slides.map((s, i) => `
+                                    <div class="p-3 bg-white border rounded">
+                                        <input value="${s.title}" onchange="updateSlide(${i}, 'title', this.value)" class="w-full px-2 py-1 border rounded mb-2">
+                                        <textarea rows="2" onchange="updateSlide(${i}, 'bullets', this.value.split('\\n'))" class="w-full px-2 py-1 border rounded mb-2">${s.bullets.join('\n')}</textarea>
+                                        <input value="${s.voiceover_prompt}" onchange="updateSlide(${i}, 'voiceover_prompt', this.value)" class="w-full px-2 py-1 border rounded">
+                                    </div>
+                                `).join('')}
+                                <input type="text" value="${m.chat_prompt}" onchange="update('chat_prompt', this.value)" class="w-full px-3 py-2 border rounded">
+                            </div>
+                        ` : `
+                        <div class="bg-gray-50 p-4 rounded mb-4">
+                            <h4 class="font-semibold mb-2">Introduction</h4>
+                            <p class="text-sm">${m.introduction}</p>
+                        </div>
+                        <h4 class="font-semibold mb-2">Slide Outline</h4>
+                        <table class="w-full text-sm border mb-4">
+                            <thead class="bg-gray-100">
+                                <tr>
+                                    <th class="border p-2">Slide</th>
+                                    <th class="border p-2">Title</th>
+                                    <th class="border p-2">Bullets</th>
+                                    <th class="border p-2">Voice-Over Prompt</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${m.slides.map((s, i) => `
+                                    <tr>
+                                        <td class="border p-2">${i + 1}</td>
+                                        <td class="border p-2 font-medium">${s.title}</td>
+                                        <td class="border p-2">${s.bullets.join('<br>')}</td>
+                                        <td class="border p-2 text-gray-600">${s.voiceover_prompt}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                        <div class="grid grid-cols-2 gap-4 mb-4">
+                            <div class="bg-blue-50 p-4 rounded">
+                                <h4 class="font-semibold mb-2">Learner Steps</h4>
+                                <ul class="text-sm space-y-1">
+                                    ${m.learner_steps.map(s => `<li>• ${s}</li>`).join('')}
+                                </ul>
+                            </div>
+                            <div class="bg-green-50 p-4 rounded">
+                                <h4 class="font-semibold mb-2">Habits</h4>
+                                <ul class="text-sm space-y-1">
+                                    ${m.habits.daily ? `<li>• <strong>Daily:</strong> ${m.habits.daily}</li>` : ''}
+                                    ${m.habits.weekly ? `<li>• <strong>Weekly:</strong> ${m.habits.weekly}</li>` : ''}
+                                    ${m.habits.monthly ? `<li>• <strong>Monthly:</strong> ${m.habits.monthly}</li>` : ''}
+                                    ${m.habits.quarterly ? `<li>• <strong>Quarterly:</strong> ${m.habits.quarterly}</li>` : ''}
+                                </ul>
+                            </div>
+                        </div>
+                        <div class="bg-purple-50 p-4 rounded mb-4">
+                            <h4 class="font-semibold mb-2">Chat Prompt</h4>
+                            <p class="text-sm">${m.chat_prompt}</p>
+                        </div>
+                        <div class="bg-orange-50 p-4 rounded">
+                            <h4 class="font-semibold mb-2">Mentor Questions</h4>
+                            <ul class="text-sm space-y-1">
+                                ${m.mentor_questions.map(q => `<li>• ${q}</li>`).join('')}
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function attachListeners() {
+            const provider = document.getElementById('provider');
+            const apiKey = document.getElementById('apiKey');
+            const topic = document.getElementById('topic');
+            const audience = document.getElementById('audience');
+            const objective = document.getElementById('objective');
+            const context = document.getElementById('context');
+
+            if (provider) provider.onchange = e => { state.apiProvider = e.target.value; };
+            if (apiKey) apiKey.oninput = e => { state.apiKey = e.target.value; };
+            if (topic) topic.oninput = e => { state.topic = e.target.value; };
+            if (audience) audience.oninput = e => { state.audience = e.target.value; };
+            if (objective) objective.oninput = e => { state.objective = e.target.value; };
+            if (context) context.oninput = e => { state.context = e.target.value; };
+        }
+
+        async function generate() {
+            if (!state.apiKey || !state.topic || !state.audience || !state.objective) {
+                alert('Fill required fields');
                 return;
             }
 
-            if (!formData.topic || !formData.targetAudience || !formData.learningObjective) {
-                alert('Please fill in all required fields (Topic, Target Audience, Learning Objective)');
-                return;
-            }
-
-            isGenerating = true;
+            state.generating = true;
             render();
 
-            const prompt = `You are an expert instructional designer creating online microlearning missions.
+            const prompt = `Create a microlearning mission for online delivery.
 
-Create a production-ready mission document for this training topic:
+Topic: ${state.topic}
+Audience: ${state.audience}
+Objective: ${state.objective}
+${state.context ? `Context: ${state.context}` : ''}
 
-MISSION DETAILS:
-Topic: ${formData.topic}
-Target Audience: ${formData.targetAudience}
-Learning Objective: ${formData.learningObjective}
-${formData.context ? `Context: ${formData.context}` : ''}
+Requirements: 3-5 min, 12-18 slides at 30-45 sec each. Voice-over prompts are questions, not scripts.
 
-REQUIREMENTS:
-- 3-5 minute online learning module (12-18 slides at 30-45 seconds each)
-- Adapt slide flow based on content type (conceptual vs. procedural vs. behavioral)
-- Voice-over prompts should be reflective questions, NOT full scripts
-- This is for remote/online delivery
-
-Generate a JSON object with this EXACT structure:
+Return JSON:
 {
-  "mission_title": "Clear, compelling title",
-  "introduction": "2-3 sentence paragraph introducing the topic and why it matters",
-  "slides": [
-    {
-      "slide_number": 1,
-      "title": "Slide title",
-      "bullets": ["Bullet 1", "Bullet 2", "Bullet 3"],
-      "voiceover_prompt": "Reflective question or thinking prompt"
-    }
-  ],
-  "learner_steps": [
-    "Read the material in this mission",
-    "Watch the presentation video (5-7 minutes)",
-    "Interact with the chat activity",
-    "Reflect on and answer the mentor questions"
-  ],
-  "chat_prompt": "One engaging question about applying this topic",
-  "mentor_questions": [
-    "Question 1 about application",
-    "Question 2 about challenges",
-    "Question 3 about implementation",
-    "Question 4 about making it sustainable"
-  ],
-  "habits": {
-    "daily": "Daily habit suggestion or null",
-    "weekly": "Weekly habit suggestion or null", 
-    "monthly": "Monthly habit suggestion or null",
-    "quarterly": "Quarterly habit suggestion or null"
-  }
-}
-
-CRITICAL: Return ONLY valid JSON, no other text.`;
+  "mission_title": "...",
+  "introduction": "2-3 sentences",
+  "slides": [{"slide_number": 1, "title": "...", "bullets": ["..."], "voiceover_prompt": "question?"}],
+  "learner_steps": ["..."],
+  "chat_prompt": "...",
+  "mentor_questions": ["..."],
+  "habits": {"daily": "...", "weekly": "...", "monthly": null, "quarterly": null}
+}`;
 
             try {
-                let response;
+                const url = state.apiProvider === 'openai' 
+                    ? 'https://api.openai.com/v1/chat/completions'
+                    : 'https://api.anthropic.com/v1/messages';
+                
+                const headers = state.apiProvider === 'openai'
+                    ? {'Content-Type': 'application/json', 'Authorization': `Bearer ${state.apiKey}`}
+                    : {'Content-Type': 'application/json', 'x-api-key': state.apiKey, 'anthropic-version': '2023-06-01'};
+                
+                const body = state.apiProvider === 'openai'
+                    ? {model: 'gpt-4o', messages: [{role: 'user', content: prompt}]}
+                    : {model: 'claude-sonnet-4-20250514', max_tokens: 4096, messages: [{role: 'user', content: prompt}]};
 
-                if (apiProvider === 'openai') {
-                    response = await fetch('https://api.openai.com/v1/chat/completions', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${apiKey}`
-                        },
-                        body: JSON.stringify({
-                            model: 'gpt-4o',
-                            messages: [
-                                { role: 'system', content: 'You are an expert instructional designer. Always respond with valid JSON only.' },
-                                { role: 'user', content: prompt }
-                            ],
-                            temperature: 0.7
-                        })
-                    });
-                } else {
-                    response = await fetch('https://api.anthropic.com/v1/messages', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'x-api-key': apiKey,
-                            'anthropic-version': '2023-06-01'
-                        },
-                        body: JSON.stringify({
-                            model: 'claude-sonnet-4-20250514',
-                            max_tokens: 4096,
-                            messages: [{ role: 'user', content: prompt }]
-                        })
-                    });
-                }
-
-                if (!response.ok) {
-                    throw new Error(`API Error ${response.status}`);
-                }
-
-                const data = await response.json();
-                let content = apiProvider === 'openai' 
-                    ? data.choices[0].message.content 
-                    : data.content[0].text;
-
-                content = content.trim();
-                if (content.startsWith('```json')) {
-                    content = content.replace(/^```json\n/, '').replace(/\n```$/, '');
-                } else if (content.startsWith('```')) {
-                    content = content.replace(/^```\n/, '').replace(/\n```$/, '');
-                }
-
-                generatedMission = JSON.parse(content);
-                isGenerating = false;
+                const res = await fetch(url, {method: 'POST', headers, body: JSON.stringify(body)});
+                const data = await res.json();
+                let content = state.apiProvider === 'openai' ? data.choices[0].message.content : data.content[0].text;
+                content = content.trim().replace(/^```json\n?/, '').replace(/\n?```$/, '');
+                state.mission = JSON.parse(content);
+                state.generating = false;
                 render();
-
             } catch (error) {
-                alert(`Error generating mission: ${error.message}`);
-                isGenerating = false;
+                alert('Error: ' + error.message);
+                state.generating = false;
                 render();
             }
         }
 
-        function startOver() {
-            generatedMission = null;
+        function newMission() {
+            state.mission = null;
             render();
         }
 
         function downloadJSON() {
-            const blob = new Blob([JSON.stringify(generatedMission, null, 2)], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
+            const blob = new Blob([JSON.stringify(state.mission, null, 2)], {type: 'application/json'});
             const a = document.createElement('a');
-            a.href = url;
-            a.download = `${generatedMission.mission_title.replace(/\s+/g, '_')}.json`;
+            a.href = URL.createObjectURL(blob);
+            a.download = `${state.mission.mission_title.replace(/\s+/g, '_')}.json`;
             a.click();
-            URL.revokeObjectURL(url);
         }
 
         function downloadText() {
-            let text = `${generatedMission.mission_title}\n\n`;
-            text += `Introduction\n${generatedMission.introduction}\n\n`;
-            text += `Slide Outline\n`;
-            text += `Slide\tTitle\tSlide Bullets\tVoice-Over Prompt\n`;
-            generatedMission.slides.forEach((slide, i) => {
-                text += `${i + 1}\t${slide.title}\t${slide.bullets.join('\n')}\t${slide.voiceover_prompt}\n`;
+            let txt = `${state.mission.mission_title}\n\nIntroduction\n${state.mission.introduction}\n\nSlides\n`;
+            state.mission.slides.forEach((s, i) => {
+                txt += `${i + 1}\t${s.title}\t${s.bullets.join('\n')}\t${s.voiceover_prompt}\n`;
             });
-            text += `\nLearner Steps\n${generatedMission.learner_steps.map(s => '• ' + s).join('\n')}\n\n`;
-            text += `Chat Prompt\n${generatedMission.chat_prompt}\n\n`;
-            text += `Mentor Questions\n${generatedMission.mentor_questions.map(q => '• ' + q).join('\n')}\n\n`;
-            text += `Habits\n`;
-            if (generatedMission.habits.daily) text += `• Daily: ${generatedMission.habits.daily}\n`;
-            if (generatedMission.habits.weekly) text += `• Weekly: ${generatedMission.habits.weekly}\n`;
-            if (generatedMission.habits.monthly) text += `• Monthly: ${generatedMission.habits.monthly}\n`;
-            if (generatedMission.habits.quarterly) text += `• Quarterly: ${generatedMission.habits.quarterly}\n`;
-
-            const blob = new Blob([text], { type: 'text/plain' });
-            const url = URL.createObjectURL(blob);
+            txt += `\nSteps\n${state.mission.learner_steps.map(s => '• ' + s).join('\n')}\n`;
+            txt += `\nChat\n${state.mission.chat_prompt}\n\nQuestions\n${state.mission.mentor_questions.map(q => '• ' + q).join('\n')}\n`;
+            const blob = new Blob([txt], {type: 'text/plain'});
             const a = document.createElement('a');
-            a.href = url;
-            a.download = `${generatedMission.mission_title.replace(/\s+/g, '_')}.txt`;
+            a.href = URL.createObjectURL(blob);
+            a.download = `${state.mission.mission_title.replace(/\s+/g, '_')}.txt`;
             a.click();
-            URL.revokeObjectURL(url);
         }
 
         function downloadCSV() {
-            const headers = ['Slide', 'Title', 'Slide Bullets', 'Voice-Over Prompt'];
-            const rows = generatedMission.slides.map((s, i) => [
-                i + 1,
-                s.title,
-                s.bullets.join(' | '),
-                s.voiceover_prompt
-            ]);
-
-            const csv = [
-                headers.join(','),
-                ...rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(','))
+            const csv = ['Slide,Title,Bullets,Prompt', 
+                ...state.mission.slides.map((s, i) => `${i + 1},"${s.title}","${s.bullets.join(' | ')}","${s.voiceover_prompt}"`)
             ].join('\n');
-
-            const blob = new Blob([csv], { type: 'text/csv' });
-            const url = URL.createObjectURL(blob);
+            const blob = new Blob([csv], {type: 'text/csv'});
             const a = document.createElement('a');
-            a.href = url;
-            a.download = `${generatedMission.mission_title.replace(/\s+/g, '_')}_Slides.csv`;
+            a.href = URL.createObjectURL(blob);
+            a.download = `${state.mission.mission_title.replace(/\s+/g, '_')}.csv`;
             a.click();
-            URL.revokeObjectURL(url);
         }
 
         function toggleEdit() {
-            isEditing = !isEditing;
-            if (!isEditing) {
-                chatHistory = [];
-            }
+            state.editing = !state.editing;
             render();
         }
 
-        function updateField(field, value) {
-            generatedMission[field] = value;
+        function update(field, value) {
+            state.mission[field] = value;
         }
 
-        function updateSlide(index, field, value) {
-            generatedMission.slides[index][field] = value;
-        }
-
-        function clearChat() {
-            chatHistory = [];
-            render();
-        }
-
-        async function sendChat() {
-            const input = document.getElementById('chatInput');
-            const message = input.value.trim();
-            if (!message) return;
-
-            chatHistory.push({ role: 'user', content: message });
-            isProcessingChat = true;
-            input.value = '';
-            render();
-
-            const prompt = `You are helping edit a training mission. The user wants to make changes.
-
-CURRENT MISSION:
-${JSON.stringify(generatedMission, null, 2)}
-
-USER REQUEST: ${message}
-
-Provide the updated mission as valid JSON with the same structure. Make ONLY the changes requested. Return ONLY JSON, no explanation.`;
-
-            try {
-                let response;
-                if (apiProvider === 'openai') {
-                    response = await fetch('https://api.openai.com/v1/chat/completions', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${apiKey}`
-                        },
-                        body: JSON.stringify({
-                            model: 'gpt-4o',
-                            messages: [{ role: 'user', content: prompt }],
-                            temperature: 0.7
-                        })
-                    });
-                } else {
-                    response = await fetch('https://api.anthropic.com/v1/messages', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'x-api-key': apiKey,
-                            'anthropic-version': '2023-06-01'
-                        },
-                        body: JSON.stringify({
-                            model: 'claude-sonnet-4-20250514',
-                            max_tokens: 4096,
-                            messages: [{ role: 'user', content: prompt }]
-                        })
-                    });
-                }
-
-                const data = await response.json();
-                let content = apiProvider === 'openai' ? data.choices[0].message.content : data.content[0].text;
-                content = content.trim().replace(/^```json\n?/, '').replace(/\n?```$/, '');
-                
-                const updated = JSON.parse(content);
-                generatedMission = updated;
-                chatHistory.push({ role: 'assistant', content: 'Updated successfully!' });
-                isProcessingChat = false;
-                render();
-            } catch (error) {
-                chatHistory.push({ role: 'assistant', content: `Error: ${error.message}` });
-                isProcessingChat = false;
-                render();
-            }
+        function updateSlide(i, field, value) {
+            state.mission.slides[i][field] = value;
         }
 
         render();
