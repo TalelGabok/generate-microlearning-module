@@ -95,7 +95,7 @@
                                 <button onclick="toggleEdit()" class="px-4 py-2 ${state.editing ? 'bg-gray-600' : 'bg-indigo-600'} text-white rounded">
                                     ${state.editing ? 'Close AI Editor' : 'Edit with AI'}
                                 </button>
-                                <button onclick="toggleDirectEdit()" class="px-4 py-2 ${state.directEdit ? 'bg-gray-600' : 'bg-purple-600'} text-white rounded">
+                                <button onclick="toggleDirectEdit()" class="px-4 py-2 ${state.directEdit ? 'bg-gray-600' : 'bg-purple-600'} text-white rounded hover:${state.directEdit ? 'bg-gray-700' : 'bg-purple-700'}">
                                     ${state.directEdit ? 'Done Editing' : 'Direct Edit'}
                                 </button>
                                 <button onclick="newMission()" class="px-4 py-2 bg-gray-600 text-white rounded">New</button>
